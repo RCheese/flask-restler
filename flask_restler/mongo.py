@@ -3,10 +3,10 @@ from types import FunctionType
 
 import bson
 import marshmallow as ma
-from flask._compat import string_types
 
-from .filters import Filter as VanilaFilter, Filters
-from .resource import ResourceOptions, Resource, APIError, logger
+from .filters import Filter as VanilaFilter
+from .filters import Filters
+from .resource import APIError, Resource, ResourceOptions, logger
 
 
 class ObjectId(ma.fields.Field):
@@ -17,7 +17,7 @@ class ObjectId(ma.fields.Field):
         try:
             return bson.ObjectId(value)
         except:
-            raise ma.ValidationError('invalid ObjectId `%s`' % value)
+            raise ma.ValidationError("invalid ObjectId `%s`" % value)
 
     def _serialize(self, value, attr, obj):
         if value is None:
@@ -59,16 +59,15 @@ class MongoOptions(ResourceOptions):
         """Initialize the resource."""
         self._collection = None
         super(MongoOptions, self).__init__(cls)
-        self.name = self.meta and getattr(self.meta, 'name', None)
+        self.name = self.meta and getattr(self.meta, "name", None)
         if not self.collection:
             return
 
         self.name = self.name or str(self.collection.name)
 
         if not cls.Schema:
-            meta = type('Meta', (object,), self.schema_meta)
-            cls.Schema = type(
-                self.name.title() + 'Schema', (MongoSchema,), dict({'Meta': meta}, **self.schema))
+            meta = type("Meta", (object,), self.schema_meta)
+            cls.Schema = type(self.name.title() + "Schema", (MongoSchema,), dict({"Meta": meta}, **self.schema))
 
     @property
     def collection(self):
@@ -88,19 +87,19 @@ class Filter(VanilaFilter):
     """Filter Mongo collections."""
 
     operators = {
-        '$eq': '$eq',
-        '$ge': '$gte',
-        '$gt': '$gt',
-        '$in': '$in',
-        '$le': '$lte',
-        '$lt': '$lt',
-        '$ne': '$ne',
-        '$nin': '$nin',
+        "$eq": "$eq",
+        "$ge": "$gte",
+        "$gt": "$gt",
+        "$in": "$in",
+        "$le": "$lte",
+        "$lt": "$lt",
+        "$ne": "$ne",
+        "$nin": "$nin",
     }
 
     def apply(self, collection, ops, **kwargs):
         """Filter mongo."""
-        logger.debug('Apply filter %s (%r)', self.name, ops)
+        logger.debug("Apply filter %s (%r)", self.name, ops)
         return collection.find({self.name: dict(ops)})
 
 
@@ -128,10 +127,33 @@ class MongoChain(object):
     """
 
     CURSOR_METHODS = (
-        'where', 'sort', 'skip', 'rewind', 'retrieved', 'remove_option', 'next', 'min',
-        'max_time_ms', 'max_scan', 'max_await_time_ms', 'max', 'limit', 'hint', 'explain',
-        'distinct', 'cursor_id', 'count', 'comment', 'collection', 'close', 'clone', 'batch_size',
-        'alive', 'address', 'add_option', '__getitem__'
+        "where",
+        "sort",
+        "skip",
+        "rewind",
+        "retrieved",
+        "remove_option",
+        "next",
+        "min",
+        "max_time_ms",
+        "max_scan",
+        "max_await_time_ms",
+        "max",
+        "limit",
+        "hint",
+        "explain",
+        "distinct",
+        "cursor_id",
+        "count",
+        "comment",
+        "collection",
+        "close",
+        "clone",
+        "batch_size",
+        "alive",
+        "address",
+        "add_option",
+        "__getitem__",
     )
 
     def __init__(self, collection):
@@ -150,31 +172,31 @@ class MongoChain(object):
     def find_one(self, query=None, projection=None):
         """Apply filters and return cursor."""
         query = self.__update__(query)
-        query = query and {'$and': query} or {}
-        logger.debug('Mongo find one: %r', query)
+        query = query and {"$and": query} or {}
+        logger.debug("Mongo find one: %r", query)
         return self.collection.find_one(query, projection=projection)
 
     def aggregate(self, pipeline, **kwargs):
         """Aggregate collection."""
         if self.query:
             for params in pipeline:
-                if '$match' in params:
-                    query = self.__update__(params['$match'])
-                    params['$match'] = {'$and': query}
+                if "$match" in params:
+                    query = self.__update__(params["$match"])
+                    params["$match"] = {"$and": query}
                     break
             else:
-                pipeline.insert(0, {'$match': {'$and': query}})
-            logger.debug('Mongo aggregate: %r', pipeline)
+                pipeline.insert(0, {"$match": {"$and": query}})
+            logger.debug("Mongo aggregate: %r", pipeline)
 
         if self.sorting:
-            pipeline = [p for p in pipeline if '$sort' not in p]
-            pipeline.append({'$sort': dict(self.sorting)})
+            pipeline = [p for p in pipeline if "$sort" not in p]
+            pipeline.append({"$sort": dict(self.sorting)})
 
         return self.collection.aggregate(pipeline, **kwargs)
 
     def sort(self, key, direction=1):
         """Save ordering properties."""
-        if isinstance(key, string_types):
+        if isinstance(key, str):
             self.sorting = [(key, direction)]
         else:
             self.sorting = key
@@ -194,7 +216,7 @@ class MongoChain(object):
 
     def __iter__(self):
         """Iterate by self collection."""
-        query = self.query and {'$and': self.query} or {}
+        query = self.query and {"$and": self.query} or {}
         if self.sorting:
             return self.collection.find(query, self.projection).sort(self.sorting)
 
@@ -202,9 +224,9 @@ class MongoChain(object):
 
     def __getattr__(self, name):
         """Proxy any attributes except find to self.collection."""
-        logger.debug('Mongo load: %r', self.query)
+        logger.debug("Mongo load: %r", self.query)
         if name in self.CURSOR_METHODS:
-            query = self.query and {'$and': self.query} or {}
+            query = self.query and {"$and": self.query} or {}
             cursor = self.collection.find(query, self.projection)
             if self.sorting:
                 cursor = cursor.sort(self.sorting)
@@ -223,10 +245,10 @@ class MongoResource(Resource):
         """Default params."""
 
         collection = None
-        filters = 'login',
+        filters = ("login",)
         filters_converter = MongoFilters
         aggregate = False  # Support aggregation. Set to pipeline.
-        object_id = '_id'
+        object_id = "_id"
         schema = {}
 
     def get_many(self, *args, **kwargs):
@@ -244,13 +266,10 @@ class MongoResource(Resource):
     def paginate(self, offset=0, limit=None):
         """Paginate collection."""
         if self.meta.aggregate:
-            pipeline_all = self.meta.aggregate + [{'$skip': offset}, {'$limit': limit}]
-            pipeline_num = self.meta.aggregate + [{'$group': {'_id': None, 'total': {'$sum': 1}}}]
+            pipeline_all = self.meta.aggregate + [{"$skip": offset}, {"$limit": limit}]
+            pipeline_num = self.meta.aggregate + [{"$group": {"_id": None, "total": {"$sum": 1}}}]
             counts = list(self.collection.aggregate(pipeline_num))
-            return (
-                self.collection.aggregate(pipeline_all),
-                counts and counts[0]['total'] or 0
-            )
+            return (self.collection.aggregate(pipeline_all), counts and counts[0]["total"] or 0)
         return self.collection.skip(offset).limit(limit), self.collection.count()
 
     def to_simple(self, data, many=False, **kwargs):
@@ -265,11 +284,11 @@ class MongoResource(Resource):
 
     def save(self, resource):
         """Save resource to DB."""
-        if resource.get('_id'):
-            self.meta.collection.replace_one({'_id': resource['_id']}, resource)
+        if resource.get("_id"):
+            self.meta.collection.replace_one({"_id": resource["_id"]}, resource)
         else:
             write = self.meta.collection.insert_one(resource)
-            resource['_id'] = write.inserted_id
+            resource["_id"] = write.inserted_id
         return resource
 
     def sort(self, collection, *sorting, **Kwargs):
@@ -280,5 +299,5 @@ class MongoResource(Resource):
     def delete(self, resource=None, **kwargs):
         """Delete a resource from Mongo collection."""
         if resource is None:
-            raise APIError('Resource not found', status_code=404)
+            raise APIError("Resource not found", status_code=404)
         self.collection.delete_one({self.meta.object_id: resource[self.meta.object_id]})

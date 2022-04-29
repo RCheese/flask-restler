@@ -2,6 +2,5 @@
 
 
 class Runner(object):
-
     def __init__(self, Resource):
         self.resource = Resource()

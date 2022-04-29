@@ -5,27 +5,27 @@ import operator
 
 from cached_property import cached_property
 from flask import request
-from marshmallow import fields, missing, ValidationError
+from marshmallow import ValidationError, fields, missing
+
 from . import logger
 
-
-FILTERS_ARG = 'where'
+FILTERS_ARG = "where"
 
 
 class Filter(object):
     """Base filter class."""
 
     operators = {
-        '$lt': operator.lt,
-        '$le': operator.le,
-        '$gt': operator.gt,
-        '$ge': operator.ge,
-        '$eq': operator.eq,
-        '$ne': operator.ne,
-        '$in': lambda v, c: v in c,
+        "$lt": operator.lt,
+        "$le": operator.le,
+        "$gt": operator.gt,
+        "$ge": operator.ge,
+        "$eq": operator.eq,
+        "$ne": operator.ne,
+        "$in": lambda v, c: v in c,
     }
 
-    list_ops = '$in',
+    list_ops = ("$in",)
     field_cls = fields.Raw
 
     def __init__(self, name, fname=None, field=None):
@@ -35,7 +35,7 @@ class Filter(object):
         self.field = field or self.field_cls(attribute=name)
 
     def __repr__(self):
-        return '<Filter %s>' % (self.field.attribute or self.name or self.fname)
+        return "<Filter %s>" % (self.field.attribute or self.name or self.fname)
 
     def parse(self, data):
         """Parse operator and value from filter's data."""
@@ -43,15 +43,17 @@ class Filter(object):
         if not isinstance(val, dict):
             val = self.field.deserialize(val)
             request.filters[self.fname] = val
-            return (self.operators['$eq'], val),
+            return ((self.operators["$eq"], val),)
 
         ops = ()
         request.filters[self.fname] = {}
         for op, val in val.items():
             if op not in self.operators:
                 continue
-            val = self.field.deserialize(val) if op not in self.list_ops else [self.field.deserialize(v) for v in val]  # noqa
-            ops += (self.operators[op], val),
+            val = (
+                self.field.deserialize(val) if op not in self.list_ops else [self.field.deserialize(v) for v in val]
+            )  # noqa
+            ops += ((self.operators[op], val),)
             request.filters[self.fname][op] = val
 
         return ops
@@ -65,8 +67,10 @@ class Filter(object):
 
     def apply(self, collection, ops, **kwargs):  # noqa
         """Apply current filter."""
+
         def validator(obj):
             return all(op(obj, val) for (op, val) in ops)
+
         return [o for o in collection if validator(o)]
 
 
@@ -106,10 +110,10 @@ class Filters(object):
         except (ValueError, TypeError):
             return collection
 
-        logger.debug('Filter resources: %r', data)
+        logger.debug("Filter resources: %r", data)
 
         filters = [f for f in self.filters if f.fname in data]
-        logger.debug('Filters active: %r', filters)
+        logger.debug("Filters active: %r", filters)
         for f in filters:
             collection = f.filter(collection, data, view=view, **kwargs)
         return collection

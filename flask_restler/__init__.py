@@ -1,12 +1,11 @@
 import logging
 
-
 __license__ = "MIT"
 __project__ = "Flask-Restler"
 __version__ = "1.20.1"
 
 
-logger = logging.getLogger('flask-restler')
+logger = logging.getLogger("flask-restler")
 logger.addHandler(logging.NullHandler())
 
 
@@ -25,8 +24,8 @@ class APIError(Exception):
 
     def to_dict(self):
         rv = dict(self.payload or ())
-        rv['error'] = self.message
-        rv['code'] = rv.get('code', self.status_code)
+        rv["error"] = self.message
+        rv["code"] = rv.get("code", self.status_code)
         return rv
 
 
@@ -43,5 +42,6 @@ def route(rule=None, endpoint=None, **options):
         return decorator(f)
 
     return decorator
+
 
 from .api import Api, Resource  # noqa

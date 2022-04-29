@@ -6,29 +6,27 @@ import collections
 import logging
 import math
 import re
+from copy import deepcopy
 
 from apispec import yaml_utils
-from flask import request, current_app, abort, Response
-from flask._compat import with_metaclass
+from flask import Response, abort, current_app, request
 from flask.json import dumps
 from flask.views import View
 
 from . import APIError, logger
 from .auth import current_user
-from .filters import Filters, FILTERS_ARG
-from copy import deepcopy
+from .filters import FILTERS_ARG, Filters
 
 try:
     from urllib.parse import urlencode
 except ImportError:
     from urllib import urlencode
 
-
-PER_PAGE_ARG = 'per_page'
-PAGE_ARG = 'page'
-SORT_ARG = 'sort'
+PER_PAGE_ARG = "per_page"
+PAGE_ARG = "page"
+SORT_ARG = "sort"
 INTERNAL_ARGS = set([PER_PAGE_ARG, PAGE_ARG, SORT_ARG, FILTERS_ARG])
-RE_URL = re.compile(r'<(?:[^:<>]+:)?([^<>]+)>')
+RE_URL = re.compile(r"<(?:[^:<>]+:)?([^<>]+)>")
 
 
 class ResourceOptions(object):
@@ -47,13 +45,12 @@ class ResourceOptions(object):
                 continue
 
             for k, v in base.Meta.__dict__.items():
-                if k.startswith('__'):
+                if k.startswith("__"):
                     continue
                 setattr(self, k, v)
 
         # Generate name
-        self.name = (meta and getattr(meta, 'name', None)) or \
-            cls.__name__.lower().split('resource', 1)[0]
+        self.name = (meta and getattr(meta, "name", None)) or cls.__name__.lower().split("resource", 1)[0]
 
         if self.per_page:  # noqa
             self.per_page = int(self.per_page)
@@ -67,16 +64,18 @@ class ResourceOptions(object):
             self.strict = set(self.strict) | INTERNAL_ARGS
 
         # Setup endpoints
-        self.endpoints = getattr(self, 'endpoints', {})
-        self.endpoints.update({
-            value.route[1]: (value, value.route) for value in cls.__dict__.values()
-            if hasattr(value, 'route') and isinstance(value.route, tuple)
-        })
+        self.endpoints = getattr(self, "endpoints", {})
+        self.endpoints.update(
+            {
+                value.route[1]: (value, value.route)
+                for value in cls.__dict__.values()
+                if hasattr(value, "route") and isinstance(value.route, tuple)
+            }
+        )
 
         # Setup schema_meta
         self.schema_meta = self.schema_meta or {
-            k[7:]: self.__dict__[k] for k in self.__dict__
-            if k.startswith('schema_') and not k == 'schema_meta'
+            k[7:]: self.__dict__[k] for k in self.__dict__ if k.startswith("schema_") and not k == "schema_meta"
         }
 
         # Setup filters
@@ -100,12 +99,33 @@ class ResourceMeta(type):
         return cls
 
 
-class Resource(with_metaclass(ResourceMeta, View)):
+def with_metaclass(meta, *bases):
+    # This requires a bit of explanation: the basic idea is to make a
+    # dummy metaclass for one level of class instantiation that replaces
+    # itself with the actual metaclass.  Because of internal type checks
+    # we also need to make sure that we downgrade the custom metaclass
+    # for one level to something closer to type (that's why __call__ and
+    # __init__ comes back from type etc.).
+    #
+    # This has the advantage over six.with_metaclass in that it does not
+    # introduce dummy classes into the final MRO.
+    class metaclass(meta):
+        __call__ = type.__call__
+        __init__ = type.__init__
 
+        def __new__(cls, name, this_bases, d):
+            if this_bases is None:
+                return type.__new__(cls, name, (), d)
+            return meta(name, bases, d)
+
+    return metaclass("temporary_class", None, {})
+
+
+class Resource(with_metaclass(ResourceMeta, View)):
     OPTIONS_CLASS = ResourceOptions
 
     # methods: Allowed methods
-    methods = 'get',
+    methods = ("get",)
 
     # Schema: Resource marshmallow schema
     Schema = None
@@ -158,47 +178,45 @@ class Resource(with_metaclass(ResourceMeta, View)):
     def from_func(cls, func, methods=None, **params):
 
         if methods is None:
-            methods = ['GET']
+            methods = ["GET"]
 
         def proxy(self, *args, **kwargs):
             return func(self, *args, **kwargs)
 
         for m in methods:
             params[m.lower()] = proxy
-        params['methods'] = methods
-        params['__doc__'] = func.__doc__
+        params["methods"] = methods
+        params["__doc__"] = func.__doc__
         return type(func.__name__, (cls,), params)
 
     def dispatch_request(self, *args, **kwargs):
         """Process current request."""
         if self.meta.strict and not (self.meta.strict >= set(request.args)):
-            raise APIError('Invalid query params.')
+            raise APIError("Invalid query params.")
 
         self.auth = self.authorize(*args, **kwargs)
         self.collection = self.get_many(*args, **kwargs)
 
-        kwargs['resource'] = resource = self.get_one(*args, **kwargs)
+        kwargs["resource"] = resource = self.get_one(*args, **kwargs)
 
-        endpoint = kwargs.pop('endpoint', None)
+        endpoint = kwargs.pop("endpoint", None)
         if endpoint and hasattr(self, endpoint):
             method = getattr(self, endpoint)
-            logger.debug('Loaded endpoint: %s', endpoint)
+            logger.debug("Loaded endpoint: %s", endpoint)
             response = method(*args, **kwargs)
             return self.to_json_response(response)
 
         headers = {}
 
-        if request.method == 'GET' and resource is None:
+        if request.method == "GET" and resource is None:
 
             # Filter resources
             self.collection = self.filter(self.collection, *args, **kwargs)
 
             # Sort resources
             if SORT_ARG in request.args:
-                sorting = ((name.strip('-'), name.startswith('-'))
-                           for name in request.args[SORT_ARG].split(','))
-                sorting = (
-                    (self.meta.sorting.get(n), d) for n, d in sorting if n in self.meta.sorting)
+                sorting = ((name.strip("-"), name.startswith("-")) for name in request.args[SORT_ARG].split(","))
+                sorting = ((self.meta.sorting.get(n), d) for n, d in sorting if n in self.meta.sorting)
                 self.collection = self.sort(self.collection, *sorting, **kwargs)
 
             # Paginate resources
@@ -209,14 +227,13 @@ class Resource(with_metaclass(ResourceMeta, View)):
                         page = int(request.args.get(PAGE_ARG, 0))
                         offset = page * per_page
                         self.collection, total = self.paginate(offset, per_page)
-                        headers = make_pagination_headers(
-                            per_page, page, total, self.meta.page_link_header)
+                        headers = make_pagination_headers(per_page, page, total, self.meta.page_link_header)
                 except ValueError:
-                    raise APIError('Pagination params are invalid.')
+                    raise APIError("Pagination params are invalid.")
 
         if logger.level <= logging.DEBUG:
-            logger.debug('Collection: %r', self.collection)
-            logger.debug('Params: %r', kwargs)
+            logger.debug("Collection: %r", self.collection)
+            logger.debug("Params: %r", kwargs)
 
         try:
             method = getattr(self, request.method.lower())
@@ -230,8 +247,7 @@ class Resource(with_metaclass(ResourceMeta, View)):
         """Serialize simple response to Flask response."""
         if self.raw or isinstance(response, Response):
             return response
-        response = current_app.response_class(
-            dumps(response, indent=2), mimetype='application/json')
+        response = current_app.response_class(dumps(response, indent=2), mimetype="application/json")
         if headers:
             response.headers.extend(headers)
         return response
@@ -260,7 +276,7 @@ class Resource(with_metaclass(ResourceMeta, View)):
 
     def sort(self, collection, *sorting, **kwargs):
         """Sort collection."""
-        logger.debug('Sort collection: %r', sorting)
+        logger.debug("Sort collection: %r", sorting)
         return collection
 
     def load(self, data, resource=None, **kwargs):
@@ -268,7 +284,7 @@ class Resource(with_metaclass(ResourceMeta, View)):
         schema = self.get_schema(resource=resource, **kwargs)
         resource, errors = schema.load(data, partial=resource is not None)
         if errors:
-            raise APIError('Bad request', payload={'errors': errors})
+            raise APIError("Bad request", payload={"errors": errors})
         return resource
 
     def save(self, resource):
@@ -282,12 +298,12 @@ class Resource(with_metaclass(ResourceMeta, View)):
 
     def paginate(self, offset, limit):
         """Paginate results."""
-        logger.debug('Paginate collection, offset: %d, limit: %d', offset, limit)
-        return self.collection[offset: offset + limit], len(self.collection)
+        logger.debug("Paginate collection, offset: %d, limit: %d", offset, limit)
+        return self.collection[offset : offset + limit], len(self.collection)
 
     def get(self, resource=None, **kwargs):
-        logger.debug('Get resources (%r)', resource)
-        if resource is not None and resource != '':
+        logger.debug("Get resources (%r)", resource)
+        if resource is not None and resource != "":
             return self.to_simple(resource, resource=resource, **kwargs)
 
         return self.to_simple(self.collection, many=True, **kwargs)
@@ -296,23 +312,23 @@ class Resource(with_metaclass(ResourceMeta, View)):
         data = request.json or {}
         resource = self.load(data, **kwargs)
         resource = self.save(resource)
-        logger.debug('Create a resource (%r)', kwargs)
+        logger.debug("Create a resource (%r)", kwargs)
         return self.to_simple(resource, **kwargs)
 
     def put(self, resource=None, **kwargs):
         """Update a resource."""
-        logger.debug('Update a resource (%r)', resource)
+        logger.debug("Update a resource (%r)", resource)
         if resource is None:
-            raise APIError('Resource not found', status_code=404)
+            raise APIError("Resource not found", status_code=404)
 
         return self.post(resource=resource, **kwargs)
 
     patch = put
 
     def delete(self, resource=None, **kwargs):
-        logger.debug('Delete a resource (%r)', resource)
+        logger.debug("Delete a resource (%r)", resource)
         if resource is None:
-            raise APIError('Resource not found', status_code=404)
+            raise APIError("Resource not found", status_code=404)
         self.collection.remove(resource)
 
     @classmethod
@@ -321,28 +337,37 @@ class Resource(with_metaclass(ResourceMeta, View)):
             specs.components.schema(cls.meta.name, schema=cls.Schema)
 
         operations = yaml_utils.load_operations_from_docstring(cls.__doc__)
-        specs.path(RE_URL.sub(r'{\1}', cls.meta.url), operations=cls.update_operations_specs(
-            operations, ('GET', 'POST'),
-        ))
+        specs.path(
+            RE_URL.sub(r"{\1}", cls.meta.url),
+            operations=cls.update_operations_specs(
+                operations,
+                ("GET", "POST"),
+            ),
+        )
 
         if cls.meta.url_detail:
             ops = cls.update_operations_specs(
-                operations, ('GET', 'PUT', 'PATCH', 'DELETE'), parameters=[{
-                    'name': cls.meta.name,
-                    'in': 'path',
-                    'description': 'Resource Identifier',
-                    'type': 'string',
-                    'required': True,
-                }]
+                operations,
+                ("GET", "PUT", "PATCH", "DELETE"),
+                parameters=[
+                    {
+                        "name": cls.meta.name,
+                        "in": "path",
+                        "description": "Resource Identifier",
+                        "type": "string",
+                        "required": True,
+                    }
+                ],
             )
-            specs.path(RE_URL.sub(r'{\1}', cls.meta.url_detail), operations=ops)
+            specs.path(RE_URL.sub(r"{\1}", cls.meta.url_detail), operations=ops)
 
         for endpoint, (url_, name_, params_) in cls.meta.endpoints.values():
             specs.path(
-                RE_URL.sub(r'{\1}', "%s%s" % (cls.meta.url.rstrip('/'), url_)),
+                RE_URL.sub(r"{\1}", "%s%s" % (cls.meta.url.rstrip("/"), url_)),
                 operations=cls.update_operations_specs(
-                    operations, params_.get('methods', ('GET',)), method=getattr(cls, name_, None)
-                ))
+                    operations, params_.get("methods", ("GET",)), method=getattr(cls, name_, None)
+                ),
+            )
 
     @classmethod
     def update_operations_specs(cls, operations, methods, method=None, **specs):
@@ -358,34 +383,34 @@ class Resource(with_metaclass(ResourceMeta, View)):
                 continue
 
             defaults = dict(deepcopy(specs))
-            defaults.setdefault('consumes', ['application/json'])
-            defaults.setdefault('produces', ['application/json'])
-            defaults.setdefault('tags', [cls.meta.name])
+            defaults.setdefault("consumes", ["application/json"])
+            defaults.setdefault("produces", ["application/json"])
+            defaults.setdefault("tags", [cls.meta.name])
 
             docstring = clean_doc(cls_method.__doc__, cls.__doc__)
             if docstring:
-                defaults.setdefault('summary', docstring.split('\n')[0])
-                defaults.setdefault('description', docstring)
+                defaults.setdefault("summary", docstring.split("\n")[0])
+                defaults.setdefault("description", docstring)
 
-            defaults.setdefault('responses', {
-                200: {'description': 'OK', 'content': {'application/json': {}}}
-            })
+            defaults.setdefault("responses", {200: {"description": "OK", "content": {"application/json": {}}}})
             if cls.Schema:
-                defaults['responses'][200]['schema'] = {'$ref': '#/definitions/%s' % cls.meta.name}
+                defaults["responses"][200]["schema"] = {"$ref": "#/definitions/%s" % cls.meta.name}
 
-            if method_name in ('put', 'patch', 'post'):
-                defaults.setdefault('parameters', [])
+            if method_name in ("put", "patch", "post"):
+                defaults.setdefault("parameters", [])
                 schema = {}
                 if cls.Schema:
-                    schema['$ref'] = '#/definitions/%s' % cls.meta.name
+                    schema["$ref"] = "#/definitions/%s" % cls.meta.name
 
-                defaults['parameters'].append({
-                    'name': 'body',
-                    'in': 'body',
-                    'description': 'Resource Body',
-                    'required': True,
-                    'schema': schema,
-                })
+                defaults["parameters"].append(
+                    {
+                        "name": "body",
+                        "in": "body",
+                        "description": "Resource Body",
+                        "required": True,
+                        "schema": schema,
+                    }
+                )
 
             if method_name in operations:
                 defaults.update(operations[method_name])
@@ -401,29 +426,28 @@ class Resource(with_metaclass(ResourceMeta, View)):
 def make_pagination_headers(limit, curpage, total, link_header=True):
     """Return Link Hypermedia Header."""
     lastpage = int(math.ceil(1.0 * total / limit) - 1)
-    headers = {'X-Total-Count': str(total), 'X-Limit': str(limit),
-               'X-Page-Last': str(lastpage), 'X-Page': str(curpage)}
+    headers = {"X-Total-Count": str(total), "X-Limit": str(limit), "X-Page-Last": str(lastpage), "X-Page": str(curpage)}
 
     if not link_header:
         return headers
 
     base = "{}?%s".format(request.path)
     links = {}
-    links['first'] = base % urlencode(dict(request.args, **{PAGE_ARG: 0}))
-    links['last'] = base % urlencode(dict(request.args, **{PAGE_ARG: lastpage}))
+    links["first"] = base % urlencode(dict(request.args, **{PAGE_ARG: 0}))
+    links["last"] = base % urlencode(dict(request.args, **{PAGE_ARG: lastpage}))
     if curpage:
-        links['prev'] = base % urlencode(dict(request.args, **{PAGE_ARG: curpage - 1}))
+        links["prev"] = base % urlencode(dict(request.args, **{PAGE_ARG: curpage - 1}))
     if curpage < lastpage:
-        links['next'] = base % urlencode(dict(request.args, **{PAGE_ARG: curpage + 1}))
+        links["next"] = base % urlencode(dict(request.args, **{PAGE_ARG: curpage + 1}))
 
-    headers['Link'] = ",".join(['<%s>; rel="%s"' % (v, n) for n, v in links.items()])
+    headers["Link"] = ",".join(['<%s>; rel="%s"' % (v, n) for n, v in links.items()])
     return headers
 
 
 def clean_doc(*values):
     """Clean doc string."""
     for v in values:
-        v = v and v.split('---')[0].strip()
+        v = v and v.split("---")[0].strip()
         if v:
             return v
 

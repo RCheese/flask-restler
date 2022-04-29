@@ -10,14 +10,13 @@ def test_runner(app, api, client):
 
     @api.route
     class TestResource(Resource):
-
         class Meta:
-            filters = Filter('num'),
+            filters = (Filter("num"),)
 
         def authorize(self, *args, **kwars):
-            token = request.args.get('token')
+            token = request.args.get("token")
             if not token:
-                raise APIError('Forbidden', 403)
+                raise APIError("Forbidden", 403)
             return token
 
         def get_many(self, *args, **kwargs):
@@ -31,21 +30,19 @@ def test_runner(app, api, client):
             return data[resource - 1]
 
         def post(self, *args, **kwargs):
-            return 'POST'
+            return "POST"
 
     with pytest.raises(APIError):
         response = api.run(TestResource)
 
-    response = api.run(TestResource, query_string={'token': 1})
+    response = api.run(TestResource, query_string={"token": 1})
     assert response == data
 
-    response = api.run(TestResource, query_string={'token': 1, 'where': {
-        'num': {'$ge': 8}
-    }})
+    response = api.run(TestResource, query_string={"token": 1, "where": {"num": {"$ge": 8}}})
     assert response == [8, 9]
 
-    response = api.run(TestResource, path='/?token=1', kwargs=dict(test=2))
+    response = api.run(TestResource, path="/?token=1", kwargs=dict(test=2))
     assert response == 1
 
-    response = api.run(TestResource, query_string='token=1', method='POST', kwargs=dict(test=2))
-    assert response == 'POST'
+    response = api.run(TestResource, query_string="token=1", method="POST", kwargs=dict(test=2))
+    assert response == "POST"

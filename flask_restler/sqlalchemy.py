@@ -1,32 +1,32 @@
 from __future__ import absolute_import
 
 from types import FunctionType
+
 from sqlalchemy import func
 from sqlalchemy.orm.attributes import QueryableAttribute
-from flask._compat import string_types
 
-from .filters import Filter as VanilaFilter, Filters
-from .resource import ResourceOptions, Resource, APIError, logger
-
+from .filters import Filter as VanilaFilter
+from .filters import Filters
+from .resource import APIError, Resource, ResourceOptions, logger
 
 try:
-    from sqlalchemy.inspection import inspect
     from marshmallow_sqlalchemy import ModelSchema
+    from sqlalchemy.inspection import inspect
 except ImportError:
-    logger.error('Marshmallow-SQLAlchemy should be installed to use the integration.')
+    logger.error("Marshmallow-SQLAlchemy should be installed to use the integration.")
     raise
 
 
 class Filter(VanilaFilter):
 
     operators = VanilaFilter.operators
-    operators['$in'] = lambda c, v: c.in_(v)
-    operators['$nin'] = lambda c, v: ~c.in_(v)
-    operators['$ilike'] = lambda c, v: c.ilike(v)
-    operators['$notilike'] = lambda c, v: c.notilike(v)
-    operators['$like'] = lambda c, v: c.like(v)
-    operators['$notlike'] = lambda c, v: c.notlike(v)
-    operators['$match'] = lambda c, v: c.match(v)
+    operators["$in"] = lambda c, v: c.in_(v)
+    operators["$nin"] = lambda c, v: ~c.in_(v)
+    operators["$ilike"] = lambda c, v: c.ilike(v)
+    operators["$notilike"] = lambda c, v: c.notilike(v)
+    operators["$like"] = lambda c, v: c.like(v)
+    operators["$notlike"] = lambda c, v: c.notlike(v)
+    operators["$match"] = lambda c, v: c.match(v)
 
     mfield = None
 
@@ -42,10 +42,9 @@ class Filter(VanilaFilter):
         if self.mfield is not None and view is None:
             return collection
 
-        logger.debug('Apply filter %s (%r)', self.name, ops)
+        logger.debug("Apply filter %s (%r)", self.name, ops)
 
-        mfield = self.mfield if self.mfield is not None else getattr(
-            view.meta.model, self.name, None)
+        mfield = self.mfield if self.mfield is not None else getattr(view.meta.model, self.name, None)
         if mfield is None:
             return collection
         collection = collection.filter(*(op(mfield, val) for op, val in ops))
@@ -58,32 +57,31 @@ class ModelFilters(Filters):
 
 
 class ModelResourceOptions(ResourceOptions):
-
     def __init__(self, cls):
         self._session = None
 
         super(ModelResourceOptions, self).__init__(cls)
 
         self.sorting = dict(
-            (isinstance(n, QueryableAttribute) and n.name or n, prop)
-            for (n, prop) in self.sorting.items())
+            (isinstance(n, QueryableAttribute) and n.name or n, prop) for (n, prop) in self.sorting.items()
+        )
 
-        self.name = (self.meta and getattr(self.meta, 'name', None)) or \
-            self.model and self.model.__tablename__ or self.name
+        self.name = (
+            (self.meta and getattr(self.meta, "name", None)) or self.model and self.model.__tablename__ or self.name
+        )
 
         if not self.model:
             return None
 
         if not cls.Schema:
-            meta = type('Meta', (object,), dict({'model': self.model}, **self.schema_meta))
-            cls.Schema = type(
-                self.name.title() + 'Schema', (ModelSchema,), dict({'Meta': meta}, **self.schema))
+            meta = type("Meta", (object,), dict({"model": self.model}, **self.schema_meta))
+            cls.Schema = type(self.name.title() + "Schema", (ModelSchema,), dict({"Meta": meta}, **self.schema))
 
         if not self.primary_key:
             self.primary_key = inspect(self.model).primary_key[0]
 
         # Flask-SQLAlchemy support
-        if not self.session and hasattr(self.model, 'query'):
+        if not self.session and hasattr(self.model, "query"):
             self.session = self.model.query.session
 
     @property
@@ -118,7 +116,7 @@ class ModelResource(Resource):
     def sort(self, collection, *sorting, **kwargs):
         sorting_ = []
         for prop, desc in sorting:
-            if isinstance(prop, string_types):
+            if isinstance(prop, str):
                 prop = getattr(self.meta.model, prop, None)
 
             if prop is None:
@@ -141,7 +139,7 @@ class ModelResource(Resource):
 
         resource = self.collection.filter(self.meta.primary_key == resource).first()
         if resource is None:
-            raise APIError('Resource not found', status_code=404)
+            raise APIError("Resource not found", status_code=404)
 
         return resource
 
@@ -157,7 +155,7 @@ class ModelResource(Resource):
     def delete(self, resource=None, **kwargs):
         """Delete a resource."""
         if resource is None:
-            raise APIError('Resource not found', status_code=404)
+            raise APIError("Resource not found", status_code=404)
         self.meta.session.delete(resource)
         self.meta.session.commit()
 

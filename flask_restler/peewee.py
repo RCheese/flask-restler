@@ -1,16 +1,18 @@
 """Support Peewee ORM."""
 from __future__ import absolute_import
-from peewee import SQL, Field
-from flask._compat import string_types
 
-from .resource import ResourceOptions, Resource, APIError, logger
-from .filters import Filter as VanilaFilter, Filters
+from peewee import SQL, Field
+
+from .filters import Filter as VanilaFilter
+from .filters import Filters
+from .resource import APIError, Resource, ResourceOptions, logger
 
 try:
     from marshmallow_peewee import ModelSchema
 except ImportError:
     import logging
-    logging.error('Marshmallow-Peewee should be installed to use the integration.')
+
+    logging.error("Marshmallow-Peewee should be installed to use the integration.")
     raise
 
 
@@ -28,18 +30,18 @@ class Filter(VanilaFilter):
     """Filter Peewee Collection."""
 
     operators = VanilaFilter.operators
-    operators['$in'] = lambda v, c: v << c
-    operators['$nin'] = lambda v, c: ~(v << c)
-    operators['$none'] = lambda f, v: f >> v
-    operators['$like'] = lambda f, v: f % v
-    operators['$ilike'] = lambda f, v: f ** v
-    operators['$contains'] = lambda f, v: f.contains(v)
-    operators['$starts'] = lambda f, v: f.startswith(v)
-    operators['$ends'] = lambda f, v: f.endswith(v)
-    operators['$between'] = lambda f, v: f.between(*v)
-    operators['$regexp'] = lambda f, v: f.regexp(v)
+    operators["$in"] = lambda v, c: v << c
+    operators["$nin"] = lambda v, c: ~(v << c)
+    operators["$none"] = lambda f, v: f >> v
+    operators["$like"] = lambda f, v: f % v
+    operators["$ilike"] = lambda f, v: f**v
+    operators["$contains"] = lambda f, v: f.contains(v)
+    operators["$starts"] = lambda f, v: f.startswith(v)
+    operators["$ends"] = lambda f, v: f.endswith(v)
+    operators["$between"] = lambda f, v: f.between(*v)
+    operators["$regexp"] = lambda f, v: f.regexp(v)
 
-    list_ops = VanilaFilter.list_ops + ('$between', '$nin')
+    list_ops = VanilaFilter.list_ops + ("$between", "$nin")
 
     mfield = None
 
@@ -53,11 +55,10 @@ class Filter(VanilaFilter):
         if not self.mfield and view is None:
             return collection
 
-        logger.debug('Apply filter %s (%r)', self.name, ops)
+        logger.debug("Apply filter %s (%r)", self.name, ops)
 
         # Auto join to another collection
-        if self.mfield and hasattr(self.mfield, 'model_class') and \
-                self.mfield.model_class is not view.meta.model:
+        if self.mfield and hasattr(self.mfield, "model_class") and self.mfield.model_class is not view.meta.model:
             collection = ensure_join(collection, view.meta.model, self.mfield.model_class)
 
         mfield = self.mfield or view.meta.model._meta.fields.get(self.field.attribute)
@@ -78,12 +79,11 @@ class ModelResourceOptions(ResourceOptions):
     def __init__(self, cls):
         """Get meta from given model."""
         super(ModelResourceOptions, self).__init__(cls)
-        self.name = (self.meta and getattr(self.meta, 'name', None)) or \
-            self.model and self.model._meta.table_name or self.name
+        self.name = (
+            (self.meta and getattr(self.meta, "name", None)) or self.model and self.model._meta.table_name or self.name
+        )
 
-        self.sorting = dict(
-            (isinstance(n, Field) and n.name or n, prop)
-            for (n, prop) in self.sorting.items())
+        self.sorting = dict((isinstance(n, Field) and n.name or n, prop) for (n, prop) in self.sorting.items())
 
         if not self.model:
             return None
@@ -92,12 +92,11 @@ class ModelResourceOptions(ResourceOptions):
             self.primary_key = self.model._meta.get_primary_keys()[0]
 
         if not cls.Schema:
-            meta = type('Meta', (object,), dict({'model': self.model}, **self.schema_meta))
+            meta = type("Meta", (object,), dict({"model": self.model}, **self.schema_meta))
             if self.models_converter:
                 meta.model_converter = self.models_converter
 
-            cls.Schema = type(
-                self.name.title() + 'Schema', (ModelSchema,), dict({'Meta': meta}, **self.schema))
+            cls.Schema = type(self.name.title() + "Schema", (ModelSchema,), dict({"Meta": meta}, **self.schema))
 
 
 class ModelResource(Resource):
@@ -122,10 +121,10 @@ class ModelResource(Resource):
 
     def sort(self, collection, *sorting, **Kwargs):
         """Sort resources."""
-        logger.debug('Sort collection: %r', sorting)
+        logger.debug("Sort collection: %r", sorting)
         sorting_ = []
         for field, desc in sorting:
-            if isinstance(field, string_types):
+            if isinstance(field, str):
                 field = self.meta.model._meta.fields.get(field) or SQL(field)
 
             if desc:
@@ -144,7 +143,7 @@ class ModelResource(Resource):
         try:
             resource = self.collection.where(self.meta.primary_key == resource).get()
         except self.meta.model.DoesNotExist:
-            raise APIError('Resource not found', status_code=404)
+            raise APIError("Resource not found", status_code=404)
 
         return resource
 
@@ -160,16 +159,17 @@ class ModelResource(Resource):
     def delete(self, resource=None, **kwargs):
         """Delete a resource."""
         if resource is None:
-            raise APIError('Resource not found', status_code=404)
+            raise APIError("Resource not found", status_code=404)
         resource.delete_instance()
 
     def paginate(self, offset=0, limit=None):
         """Paginate queryset."""
-        logger.debug('Paginate collection, offset: %d, limit: %d', offset, limit)
+        logger.debug("Paginate collection, offset: %d, limit: %d", offset, limit)
         qs = self.collection.order_by()
         if qs._group_by:
             qs._select = qs._group_by
 
         return self.collection.offset(offset).limit(limit), qs.count()
+
 
 # pylama:ignore=E1102,W0212

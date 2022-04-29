@@ -2,34 +2,33 @@ import pytest
 
 
 def test_app(app, client):
-    response = client.get('/')
-    assert response.data == b'OK'
+    response = client.get("/")
+    assert response.data == b"OK"
 
 
 def test_simple_view(app, api, client):
-
-    @api.route('/simple', methods=['GET', 'POST'])
+    @api.route("/simple", methods=["GET", "POST"])
     def view(*args, **kwargs):
-        return {'ok': True}
+        return {"ok": True}
 
-    assert view.methods == {'GET', 'POST'}
+    assert view.methods == {"GET", "POST"}
 
-    response = client.get('/api/v1/simple')
-    assert response.json == {'ok': True}
+    response = client.get("/api/v1/simple")
+    assert response.json == {"ok": True}
 
-    response = client.post('/api/v1/simple')
-    assert response.json == {'ok': True}
+    response = client.post("/api/v1/simple")
+    assert response.json == {"ok": True}
 
 
 def test_response(app, api, client):
     from flask import Response
 
-    @api.route('/response', methods=['GET', 'POST'])
+    @api.route("/response", methods=["GET", "POST"])
     def view(*args, **kwargs):
-        return Response('OK')
+        return Response("OK")
 
-    response = client.get('/api/v1/response')
-    assert response.data == b'OK'
+    response = client.get("/api/v1/response")
+    assert response.data == b"OK"
 
 
 def test_resource(app, api, client):
@@ -37,32 +36,30 @@ def test_resource(app, api, client):
 
     @api.route
     class HelloResource(Resource):
-
         class Meta:
-            sorting = 'test',
+            sorting = ("test",)
 
         def get(self, resource=None, **kwargs):
-            return 'Hello, %s!' % (resource and resource.title() or 'World')
+            return "Hello, %s!" % (resource and resource.title() or "World")
 
-    assert HelloResource.meta.sorting == {'test': 'test'}
+    assert HelloResource.meta.sorting == {"test": "test"}
 
-    @api.route('/hello/<name>/how-are-you')
+    @api.route("/hello/<name>/how-are-you")
     class HowAreYouResource(Resource):
-
         def get(self, resource=None, name=None, **kwargs):
-            return 'Hello, %s! How are you?' % name.title()
+            return "Hello, %s! How are you?" % name.title()
 
-    response = client.get('/api/v1/hello')
-    assert response.json == 'Hello, World!'
+    response = client.get("/api/v1/hello")
+    assert response.json == "Hello, World!"
 
-    response = client.get('/api/v1/hello/mike')
-    assert response.json == 'Hello, Mike!'
+    response = client.get("/api/v1/hello/mike")
+    assert response.json == "Hello, Mike!"
 
-    response = client.post('/api/v1/hello')
+    response = client.post("/api/v1/hello")
     assert response.status_code == 405
 
-    response = client.get('/api/v1/hello/mike/how-are-you')
-    assert response.json == 'Hello, Mike! How are you?'
+    response = client.get("/api/v1/hello/mike/how-are-you")
+    assert response.json == "Hello, Mike! How are you?"
 
 
 def test_resource2(api, client):
@@ -75,11 +72,11 @@ def test_resource2(api, client):
     @api.route
     class SecondResource(Resource):
 
-        methods = 'get', 'post', 'put'
+        methods = "get", "post", "put"
 
         class Meta:
-            name = 'two'
-            filters = 'val',
+            name = "two"
+            filters = ("val",)
             strict = True
 
         def get_many(self, **kwargs):
@@ -98,27 +95,27 @@ def test_resource2(api, client):
         def custom(self, **kwargs):
             return self.__class__.__name__
 
-        @route('/custom22/test', methods=['get', 'post'])
+        @route("/custom22/test", methods=["get", "post"])
         def custom2(self, **kwargs):
-            return {'json': True}
+            return {"json": True}
 
     assert SecondResource.meta.endpoints
 
-    response = client.get('/api/v1/two')
+    response = client.get("/api/v1/two")
     assert response.json == DATA
 
-    response = client.post_json('/api/v1/two', 3)
+    response = client.post_json("/api/v1/two", 3)
     assert response.json == [1, 2, 3]
 
-    response = client.get('/api/v1/two?per_page=2')
+    response = client.get("/api/v1/two?per_page=2")
     assert response.json == [1, 2]
-    assert response.headers['x-page'] == '0'
-    assert response.headers['x-page-last'] == '1'
+    assert response.headers["x-page"] == "0"
+    assert response.headers["x-page-last"] == "1"
 
-    response = client.get('/api/v1/two?per_page=2&page=1')
+    response = client.get("/api/v1/two?per_page=2&page=1")
     assert response.json == [3]
 
-    response = client.put_json('/api/v1/two/2', 22)
+    response = client.put_json("/api/v1/two/2", 22)
     assert response.json == [1, 22, 3]
 
     response = client.get('/api/v1/two?where={"val": 22}')
@@ -127,20 +124,19 @@ def test_resource2(api, client):
     response = client.get('/api/v1/two?where={"val": {"$ge": 3}}')
     assert response.json == [22, 3]
 
-    response = client.get('/api/v1/two/custom')
+    response = client.get("/api/v1/two/custom")
     assert response.data == b'"SecondResource"'
 
-    response = client.get('/api/v1/two/custom22/test')
-    assert response.json == {'json': True}
+    response = client.get("/api/v1/two/custom22/test")
+    assert response.json == {"json": True}
 
-    response = client.post('/api/v1/two/custom22/test')
-    assert response.json == {'json': True}
+    response = client.post("/api/v1/two/custom22/test")
+    assert response.json == {"json": True}
 
-    response = client.post('/api/v1/two/custom22/test?bla-bla=22')
+    response = client.post("/api/v1/two/custom22/test?bla-bla=22")
     assert response.status_code == 400
-    assert response.json['error']
-    assert SecondResource.meta.strict == set(
-        ['where', 'sort', 'page', 'per_page'])
+    assert response.json["error"]
+    assert SecondResource.meta.strict == set(["where", "sort", "page", "per_page"])
 
 
 def test_pagination(api, client):
@@ -150,17 +146,16 @@ def test_pagination(api, client):
 
     @api.route
     class TestResource(Resource):
-
         class Meta:
             per_page = 20
 
         def get_many(self, **kwargs):
             return DATA
 
-    response = client.get('/api/v1/test')
+    response = client.get("/api/v1/test")
     assert len(response.json) == 20
 
-    response = client.get('/api/v1/test?page=2')
+    response = client.get("/api/v1/test?page=2")
     assert len(response.json) == 20
     assert response.json[0] == 41
 
@@ -170,13 +165,12 @@ def test_specs(api, client):
 
     @api.route
     class HelloResource(Resource):
-
-        @route('/world')
+        @route("/world")
         def world(self, **kwargs):
-            return 'Hello, World!'
+            return "Hello, World!"
 
         def get(self, resource=None, **kwargs):
-            return 'Hello, %s!' % (resource and resource.title() or 'World')
+            return "Hello, %s!" % (resource and resource.title() or "World")
 
-    response = client.get('/api/v1/_specs')
+    response = client.get("/api/v1/_specs")
     assert response.json
