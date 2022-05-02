@@ -108,7 +108,7 @@ class Api(Blueprint):
                 api.add_url_rule(url_detail_, view_func=view_func, **options)
 
             if api.app is not None:
-                Blueprint.register(api, api.app, {}, False)
+                Blueprint.register(api, api.app, {})
 
             return res
 
